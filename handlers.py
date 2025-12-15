@@ -17,11 +17,11 @@ def build_content(message: discord.Message) -> str:
     else:
         display_name = getattr(message.author, "display_name", None)
         if display_name:
-            author_header = f"**𑨿 {display_name}**"
+            author_header = f"**⬥ {display_name}**"
         else:
-            author_header = "**𑨿 Unknown User**"
+            author_header = "**⬥ Unknown User**"
 
-    header = f"{author_header} 🔗 {message.jump_url}" if author_header else f"🔗 {message.jump_url}"
+    header = f"-# {author_header} 🔗 {message.jump_url}" if author_header else f"-# 🔗 {message.jump_url}"
     parts = [header]
     if message.content:
         parts.append(message.content)
