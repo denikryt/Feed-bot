@@ -8,13 +8,16 @@ AllowedMentions = discord.AllowedMentions(users=False, roles=False, everyone=Fal
 
 def build_content(message: discord.Message) -> str:
     # Prefer the author's display name when available, but keep a mention for clarity.
-    display_name = getattr(message.author, "display_name", None)
-    if display_name:
-        author_header = f"**{display_name}**"
+    if getattr(message.author, "bot", False):
+        author_header = None
     else:
-        author_header = "**Unknown User**"
+        display_name = getattr(message.author, "display_name", None)
+        if display_name:
+            author_header = f"**{display_name}**"
+        else:
+            author_header = "**Unknown User**"
 
-    header = f"{author_header} 🔗 {message.jump_url}"
+    header = f"{author_header} 🔗 {message.jump_url}" if author_header else f"🔗 {message.jump_url}"
     parts = [header]
     if message.content:
         parts.append(message.content)
