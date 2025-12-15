@@ -6,6 +6,10 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 AllowedMentions = discord.AllowedMentions(users=False, roles=False, everyone=False, replied_user=False)
 
 
+def is_allowed_guild(guild_id: int | None, allowed_guild_ids: set[int]) -> bool:
+    return guild_id is not None and guild_id in allowed_guild_ids
+
+
 def build_content(message: discord.Message) -> str:
     # Prefer the author's display name when available, but keep a mention for clarity.
     if getattr(message.author, "bot", False):
@@ -48,8 +52,12 @@ async def handle_message(
     message: discord.Message,
     feed_channel_id: int,
     mapping_collection: AsyncIOMotorCollection,
+    allowed_guild_ids: set[int],
     feed_channel_cache: dict[int, discord.abc.GuildChannel],
 ) -> None:
+    if not is_allowed_guild(getattr(message.guild, "id", None), allowed_guild_ids):
+        return
+
     # Skip the feed bot itself and the feed channel to avoid loops.
     if (client.user and message.author.id == client.user.id) or message.channel.id == feed_channel_id:
         return
@@ -104,8 +112,12 @@ async def handle_message_edit(
     after: discord.Message,
     feed_channel_id: int,
     mapping_collection: AsyncIOMotorCollection,
+    allowed_guild_ids: set[int],
     feed_channel_cache: dict[int, discord.abc.GuildChannel],
 ) -> None:
+    if not is_allowed_guild(getattr(after.guild, "id", None), allowed_guild_ids):
+        return
+
     if (client.user and after.author.id == client.user.id) or after.channel.id == feed_channel_id:
         return
 
@@ -130,8 +142,12 @@ async def handle_message_delete(
     message: discord.Message,
     feed_channel_id: int,
     mapping_collection: AsyncIOMotorCollection,
+    allowed_guild_ids: set[int],
     feed_channel_cache: dict[int, discord.abc.GuildChannel],
 ) -> None:
+    if not is_allowed_guild(getattr(message.guild, "id", None), allowed_guild_ids):
+        return
+
     if message.channel.id == feed_channel_id or (client.user and message.author and message.author.id == client.user.id):
         return
 
@@ -161,8 +177,12 @@ async def handle_raw_message_delete(
     payload: discord.RawMessageDeleteEvent,
     feed_channel_id: int,
     mapping_collection: AsyncIOMotorCollection,
+    allowed_guild_ids: set[int],
     feed_channel_cache: dict[int, discord.abc.GuildChannel],
 ) -> None:
+    if not is_allowed_guild(payload.guild_id, allowed_guild_ids):
+        return
+
     # Skip deletions that happen inside the feed channel.
     if payload.channel_id == feed_channel_id:
         return

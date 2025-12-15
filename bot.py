@@ -1,6 +1,5 @@
 import asyncio
 import sys
-
 import discord
 
 from config import load_settings
@@ -28,6 +27,7 @@ async def on_message(message: discord.Message):
         message=message,
         feed_channel_id=settings.feed_channel_id,
         mapping_collection=get_mapping_collection(),
+        allowed_guild_ids=settings.allowed_guild_ids,
         feed_channel_cache=feed_channel_cache,
     )
 
@@ -40,6 +40,7 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
         after=after,
         feed_channel_id=settings.feed_channel_id,
         mapping_collection=get_mapping_collection(),
+        allowed_guild_ids=settings.allowed_guild_ids,
         feed_channel_cache=feed_channel_cache,
     )
 
@@ -51,6 +52,7 @@ async def on_message_delete(message: discord.Message):
         message=message,
         feed_channel_id=settings.feed_channel_id,
         mapping_collection=get_mapping_collection(),
+        allowed_guild_ids=settings.allowed_guild_ids,
         feed_channel_cache=feed_channel_cache,
     )
 
@@ -62,6 +64,7 @@ async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
         payload=payload,
         feed_channel_id=settings.feed_channel_id,
         mapping_collection=get_mapping_collection(),
+        allowed_guild_ids=settings.allowed_guild_ids,
         feed_channel_cache=feed_channel_cache,
     )
 
