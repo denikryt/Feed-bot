@@ -1,0 +1,18 @@
+services:
+  mongo:
+    container_name: mongo-main
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_main_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mongo_main_data:
