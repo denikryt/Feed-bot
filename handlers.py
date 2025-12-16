@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+
 import discord
 from motor.motor_asyncio import AsyncIOMotorCollection
 
@@ -21,11 +23,34 @@ def build_content(message: discord.Message) -> str:
         else:
             author_header = "**⬥ Unknown User**"
 
-    header = f"-# {author_header} 🔗 {message.jump_url}" if author_header else f"-# 🔗 {message.jump_url}"
+    header = f"-# {author_header} |{message.jump_url}" if author_header else f"-# 🔗 {message.jump_url}"
     parts = [header]
     if message.content:
         parts.append(message.content)
     return "\n".join(parts)
+
+
+async def _sticker_to_file(sticker: discord.StickerItem) -> discord.File | None:
+    try:
+        content = await sticker.read()
+    except TypeError:
+        # Lottie stickers cannot be rendered as files; skip them.
+        print(f"Skipping unsupported lottie sticker: {sticker.name} ({sticker.id})")
+        return None
+    except Exception as exc:  # noqa: BLE001
+        print(f"Failed to download sticker {sticker.id}: {exc}")
+        return None
+
+    filename = f"sticker-{sticker.id}.{sticker.format.file_extension}"
+    return discord.File(io.BytesIO(content), filename=filename)
+
+
+async def build_attachment_files(message: discord.Message) -> list[discord.File]:
+    files: list[discord.File] = []
+    for attachment in message.attachments:
+        files.append(await attachment.to_file())
+
+    return files
 
 
 async def get_feed_channel(
@@ -66,10 +91,11 @@ async def handle_message(
     if feed_channel is None:
         return
 
-    files = []
+    files: list[discord.File] = []
+    fallback_sticker_files: list[discord.File] = []
+    stickers = list(message.stickers)
     try:
-        for attachment in message.attachments:
-            files.append(await attachment.to_file())
+        files = await build_attachment_files(message)
 
         parent_reference = None
         if message.reference and message.reference.message_id:
@@ -85,12 +111,32 @@ async def handle_message(
         if existing_mapping:
             return
 
-        feed_message = await feed_channel.send(
-            content=build_content(message),
-            files=files,
-            allowed_mentions=AllowedMentions,
-            reference=parent_reference,
-        )
+        send_kwargs = {
+            "content": build_content(message),
+            "files": files,
+            "allowed_mentions": AllowedMentions,
+            "reference": parent_reference,
+        }
+        if stickers:
+            send_kwargs["stickers"] = stickers
+
+        try:
+            feed_message = await feed_channel.send(**send_kwargs)
+        except discord.HTTPException:
+            # If stickers failed (e.g., missing permissions), fall back to mirroring as files.
+            if stickers:
+                for sticker in stickers:
+                    sticker_file = await _sticker_to_file(sticker)
+                    if sticker_file:
+                        fallback_sticker_files.append(sticker_file)
+
+            if not fallback_sticker_files:
+                raise
+
+            send_kwargs.pop("stickers", None)
+            send_kwargs["files"] = [*files, *fallback_sticker_files]
+            feed_message = await feed_channel.send(**send_kwargs)
+
         await mapping_collection.insert_one(
             {
                 "_id": str(message.id),
@@ -99,7 +145,7 @@ async def handle_message(
             }
         )
     finally:
-        for f in files:
+        for f in [*files, *fallback_sticker_files]:
             try:
                 f.close()
             except Exception:
