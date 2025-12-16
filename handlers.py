@@ -6,27 +6,50 @@ import discord
 from motor.motor_asyncio import AsyncIOMotorCollection
 
 AllowedMentions = discord.AllowedMentions(users=False, roles=False, everyone=False, replied_user=False)
+_last_feed_state: dict[str, int] | None = None
 
 
 def is_allowed_guild(guild_id: int | None, allowed_guild_ids: set[int]) -> bool:
     return guild_id is not None and guild_id in allowed_guild_ids
 
 
-def build_content(message: discord.Message) -> str:
-    # Prefer the author's display name when available, but keep a mention for clarity.
-    if getattr(message.author, "bot", False):
-        author_header = None
-    else:
-        display_name = getattr(message.author, "display_name", None)
-        if display_name:
-            author_header = f"**⬥ {display_name}**"
-        else:
-            author_header = "**⬥ Unknown User**"
+def _should_include_header(source_channel_id: int, author_id: int) -> bool:
+    if _last_feed_state is None:
+        return True
 
-    header = f"-# {author_header} |{message.jump_url}" if author_header else f"-# 🔗 {message.jump_url}"
-    parts = [header]
+    return (
+        _last_feed_state.get("source_channel_id") != source_channel_id
+        or _last_feed_state.get("author_id") != author_id
+    )
+
+
+def _update_last_feed_state(source_channel_id: int, author_id: int) -> None:
+    global _last_feed_state
+    _last_feed_state = {"author_id": author_id, "source_channel_id": source_channel_id}
+
+
+def build_content(message: discord.Message, include_header: bool) -> str | None:
+    # Prefer the author's display name when available, but keep a mention for clarity.
+    parts: list[str] = []
+    if include_header:
+        if getattr(message.author, "bot", False):
+            author_header = None
+        else:
+            display_name = getattr(message.author, "display_name", None)
+            if display_name:
+                author_header = f"**⬥ {display_name}**"
+            else:
+                author_header = "**⬥ Unknown User**"
+
+        header = f"-# {author_header} |{message.jump_url}" if author_header else f"-# 🔗 {message.jump_url}"
+        parts.append(header)
+
     if message.content:
         parts.append(message.content)
+
+    if not parts:
+        return None
+
     return "\n".join(parts)
 
 
@@ -97,6 +120,8 @@ async def handle_message(
     try:
         files = await build_attachment_files(message)
 
+        include_header = _should_include_header(message.channel.id, message.author.id)
+
         parent_reference = None
         if message.reference and message.reference.message_id:
             parent_source_id = message.reference.message_id
@@ -111,12 +136,14 @@ async def handle_message(
         if existing_mapping:
             return
 
+        content = build_content(message, include_header=include_header)
         send_kwargs = {
-            "content": build_content(message),
             "files": files,
             "allowed_mentions": AllowedMentions,
             "reference": parent_reference,
         }
+        if content is not None:
+            send_kwargs["content"] = content
         if stickers:
             send_kwargs["stickers"] = stickers
 
@@ -137,6 +164,7 @@ async def handle_message(
             send_kwargs["files"] = [*files, *fallback_sticker_files]
             feed_message = await feed_channel.send(**send_kwargs)
 
+        _update_last_feed_state(source_channel_id=message.channel.id, author_id=message.author.id)
         await mapping_collection.insert_one(
             {
                 "_id": str(message.id),
@@ -180,7 +208,11 @@ async def handle_message_edit(
     except discord.NotFound:
         return
 
-    await feed_message.edit(content=build_content(after), allowed_mentions=AllowedMentions)
+    include_header = feed_message.content.startswith("-# ") if feed_message.content else False
+    await feed_message.edit(
+        content=build_content(after, include_header=include_header),
+        allowed_mentions=AllowedMentions,
+    )
 
 
 async def handle_message_delete(
