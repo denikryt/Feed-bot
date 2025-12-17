@@ -13,7 +13,11 @@ def is_allowed_guild(guild_id: int | None, allowed_guild_ids: set[int]) -> bool:
     return guild_id is not None and guild_id in allowed_guild_ids
 
 
-def _should_include_header(source_channel_id: int, author_id: int) -> bool:
+def _should_include_header(source_channel_id: int, author_id: int, is_reply: bool) -> bool:
+    # Replies always render a header regardless of block/grouping.
+    if is_reply:
+        return True
+
     if _last_feed_state is None:
         return True
 
@@ -117,19 +121,26 @@ async def handle_message(
     files: list[discord.File] = []
     fallback_sticker_files: list[discord.File] = []
     stickers = list(message.stickers)
+    is_reply = bool(message.reference and message.reference.message_id)
     try:
         files = await build_attachment_files(message)
 
-        include_header = _should_include_header(message.channel.id, message.author.id)
+        include_header = _should_include_header(message.channel.id, message.author.id, is_reply=is_reply)
 
         parent_reference = None
-        if message.reference and message.reference.message_id:
+        if is_reply:
             parent_source_id = message.reference.message_id
             parent_mapping = await mapping_collection.find_one({"_id": str(parent_source_id)})
             if parent_mapping:
                 try:
                     parent_reference = await feed_channel.fetch_message(parent_mapping["feed_message_id"])
                 except discord.NotFound:
+                    parent_reference = None
+                except discord.HTTPException as exc:
+                    print(
+                        f"Failed to fetch parent feed message for {message.id} "
+                        f"(reply target {parent_mapping['feed_message_id']}): {exc}"
+                    )
                     parent_reference = None
 
         existing_mapping = await mapping_collection.find_one({"_id": str(message.id)})
@@ -149,7 +160,25 @@ async def handle_message(
 
         try:
             feed_message = await feed_channel.send(**send_kwargs)
-        except discord.HTTPException:
+        except discord.HTTPException as exc:
+            # If Discord rejects the reply reference (e.g., deleted/invalid parent), retry without it once.
+            if send_kwargs.get("reference"):
+                send_kwargs["reference"] = None
+                try:
+                    feed_message = await feed_channel.send(**send_kwargs)
+                except discord.HTTPException as retry_exc:
+                    exc = retry_exc
+                else:
+                    _update_last_feed_state(source_channel_id=message.channel.id, author_id=message.author.id)
+                    await mapping_collection.insert_one(
+                        {
+                            "_id": str(message.id),
+                            "source_message_id": message.id,
+                            "feed_message_id": feed_message.id,
+                        }
+                    )
+                    return
+
             # If stickers failed (e.g., missing permissions), fall back to mirroring as files.
             if stickers:
                 for sticker in stickers:
@@ -158,6 +187,7 @@ async def handle_message(
                         fallback_sticker_files.append(sticker_file)
 
             if not fallback_sticker_files:
+                print(f"Failed to mirror message {message.id}: {exc}")
                 raise
 
             send_kwargs.pop("stickers", None)
