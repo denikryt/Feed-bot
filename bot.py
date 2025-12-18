@@ -25,6 +25,7 @@ from handlers import (
 settings = load_settings()
 
 intents = discord.Intents.default()
+intents.members = True
 intents.message_content = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
@@ -56,8 +57,12 @@ class UserIDTransformer(app_commands.Transformer):
     type = discord.AppCommandOptionType.string
 
     async def transform(self, interaction: discord.Interaction, value: str) -> discord.User:
+        cleaned = value.strip()
+        if cleaned.startswith("<@") and cleaned.endswith(">"):
+            cleaned = cleaned.removeprefix("<@").removeprefix("!").removesuffix(">")
+
         try:
-            user_id = int(value)
+            user_id = int(cleaned)
         except ValueError as exc:
             raise app_commands.TransformError("Invalid user id provided.") from exc
 
@@ -217,9 +222,17 @@ async def give_permissions_autocomplete(
     if guild is None:
         return []
 
+    members = list(guild.members)
+    if not members and not getattr(guild, "chunked", False):
+        try:
+            await guild.chunk(cache=True)
+            members = list(guild.members)
+        except Exception:
+            members = []
+
     current_lower = current.lower()
     choices: list[app_commands.Choice[str]] = []
-    for member in guild.members:
+    for member in members:
         if member.bot:
             continue
         label = f"{member.display_name} ({member.id})"
