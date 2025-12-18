@@ -3,49 +3,130 @@ from __future__ import annotations
 import io
 
 import discord
+import emoji
 from motor.motor_asyncio import AsyncIOMotorCollection
 
 AllowedMentions = discord.AllowedMentions(users=False, roles=False, everyone=False, replied_user=False)
-_last_feed_state: dict[str, int] | None = None
 
 
-def is_allowed_guild(guild_id: int | None, allowed_guild_ids: set[int]) -> bool:
-    return guild_id is not None and guild_id in allowed_guild_ids
+def split_leading_emoji(name: str) -> tuple[str | None, str]:
+    """Return the leading emoji (if present) and the remaining text."""
+    emoji_entries = emoji.emoji_list(name)
+    if not emoji_entries:
+        return None, name
+
+    first = emoji_entries[0]
+    if first.get("match_start") != 0:
+        return None, name
+
+    remainder = name[first["match_end"] :].lstrip()
+    return first["emoji"], remainder
 
 
-def _should_include_header(source_channel_id: int, author_id: int, is_reply: bool) -> bool:
-    # Replies always render a header regardless of block/grouping.
-    if is_reply:
-        return True
+def _build_channel_url(message: discord.Message, channel_id: int | None) -> str:
+    guild_id = getattr(message.guild, "id", None)
+    if channel_id is None:
+        return message.jump_url
 
-    if _last_feed_state is None:
-        return True
-
-    return (
-        _last_feed_state.get("source_channel_id") != source_channel_id
-        or _last_feed_state.get("author_id") != author_id
-    )
+    guild_segment = guild_id if guild_id is not None else "@me"
+    return f"https://discord.com/channels/{guild_segment}/{channel_id}"
 
 
-def _update_last_feed_state(source_channel_id: int, author_id: int) -> None:
-    global _last_feed_state
-    _last_feed_state = {"author_id": author_id, "source_channel_id": source_channel_id}
+def extract_channel_name_parts(name: str) -> tuple[str | None, str, str | None]:
+    """Return leading emoji (if any), cleaned name text, and trailing emoji (if any)."""
+    entries = emoji.emoji_list(name)
+    if not entries:
+        return None, name, None
+
+    first = entries[0]
+
+    # Leading-only emoji: preserve existing behavior.
+    if first.get("match_start") == 0:
+        idx = 0
+        block_end = 0
+        while idx < len(entries) and entries[idx].get("match_start") == block_end:
+            block_end = entries[idx]["match_end"]
+            idx += 1
+
+        if idx == len(entries):
+            return first["emoji"], name[first["match_end"] :].lstrip(), None
+
+        cleaned = emoji.replace_emoji(name, replace="")
+        return None, cleaned, None
+
+    # Single trailing emoji.
+    if len(entries) == 1 and entries[0].get("match_end") == len(name):
+        text_part = name[: entries[0]["match_start"]].rstrip()
+        return None, text_part, entries[0]["emoji"]
+
+    cleaned = emoji.replace_emoji(name, replace="")
+    return None, cleaned, None
+
+
+class FeedHeaderState:
+    """In-memory header grouping state per feed channel."""
+
+    def __init__(self) -> None:
+        self._state: dict[int, dict[str, int]] = {}
+
+    def should_include_header(self, feed_channel_id: int, source_channel_id: int, author_id: int, is_reply: bool) -> bool:
+        if is_reply:
+            return True
+
+        last = self._state.get(feed_channel_id)
+        if last is None:
+            return True
+
+        return last.get("source_channel_id") != source_channel_id or last.get("author_id") != author_id
+
+    def update(self, feed_channel_id: int, source_channel_id: int, author_id: int) -> None:
+        self._state[feed_channel_id] = {"author_id": author_id, "source_channel_id": source_channel_id}
 
 
 def build_content(message: discord.Message, include_header: bool) -> str | None:
-    # Prefer the author's display name when available, but keep a mention for clarity.
+    """Build mirrored content with a linked channel/thread header."""
     parts: list[str] = []
     if include_header:
-        if getattr(message.author, "bot", False):
-            author_header = None
-        else:
-            display_name = getattr(message.author, "display_name", None)
-            if display_name:
-                author_header = f"**⬥ {display_name}**"
+        channel_label: str
+        if isinstance(message.channel, discord.Thread):
+            parent = message.channel.parent
+            parent_id = parent.id if parent else None
+            parent_name = parent.name if parent and getattr(parent, "name", None) else f"channel-{message.channel.id}"
+            leading_emoji, text_name, trailing_emoji = extract_channel_name_parts(parent_name)
+            channel_display_name = text_name or f"channel-{parent_id or message.channel.id}"
+            channel_url = _build_channel_url(message, parent_id)
+            if leading_emoji:
+                channel_link = f"{leading_emoji} [**{channel_display_name}**]({channel_url})"
+            elif trailing_emoji:
+                channel_link = f"[**#{channel_display_name}**]({channel_url}) {trailing_emoji}"
             else:
-                author_header = "**⬥ Unknown User**"
+                channel_link = f"[**#{channel_display_name}**]({channel_url})"
 
-        header = f"-# {author_header} |{message.jump_url}" if author_header else f"-# 🔗 {message.jump_url}"
+            thread_name = message.channel.name
+            thread_link = f"[**{thread_name}➜**]({message.jump_url})"
+            channel_label = f"{channel_link} ⤷ {thread_link}"
+        else:
+            channel_name = getattr(message.channel, "name", None) or f"channel-{message.channel.id}"
+            leading_emoji, text_name, trailing_emoji = extract_channel_name_parts(channel_name)
+            channel_display_name = text_name or f"channel-{message.channel.id}"
+            if leading_emoji:
+                channel_label = f"{leading_emoji}[**{channel_display_name}➜**]({message.jump_url})"
+            elif trailing_emoji:
+                channel_label = (
+                    f"[**#{channel_display_name}**]({message.jump_url}) {trailing_emoji}[**➜**]({message.jump_url})"
+                )
+            else:
+                channel_label = f"[**#{channel_display_name}➜**]({message.jump_url})"
+
+        author_header = None
+        if not getattr(message.author, "bot", False):
+            display_name = getattr(message.author, "display_name", None) or getattr(message.author, "name", None)
+            author_header = f"**⬥ {display_name}**" if display_name else ""
+
+        if author_header:
+            header = f"-# {author_header} | {channel_label}"
+        else:
+            header = f"-# {channel_label}"
         parts.append(header)
 
     if message.content:
@@ -102,21 +183,149 @@ async def get_feed_channel(
 async def handle_message(
     client: discord.Client,
     message: discord.Message,
-    feed_channel_id: int,
+    routes_collection: AsyncIOMotorCollection,
     mapping_collection: AsyncIOMotorCollection,
-    allowed_guild_ids: set[int],
+    feed_channel_cache: dict[int, discord.abc.GuildChannel],
+    header_state: FeedHeaderState,
+) -> None:
+    guild_id = getattr(message.guild, "id", None)
+    if guild_id is None:
+        return
+
+    # Skip the feed bot itself.
+    if client.user and message.author.id == client.user.id:
+        return
+
+    route = await routes_collection.find_one({"_id": str(guild_id)})
+    feed_channels = route.get("feed_channels") if route else None
+    if not feed_channels:
+        return
+
+    feed_channel_ids = {entry["channel_id"] for entry in feed_channels if isinstance(entry, dict) and "channel_id" in entry}
+    # Avoid loops: do not mirror messages that originate from a configured feed channel.
+    if message.channel.id in feed_channel_ids:
+        return
+
+    for feed_entry in feed_channels:
+        feed_channel_id = feed_entry.get("channel_id")
+        if feed_channel_id is None:
+            continue
+
+        await mirror_message_to_feed_channel(
+            client=client,
+            message=message,
+            feed_channel_id=feed_channel_id,
+            mapping_collection=mapping_collection,
+            feed_channel_cache=feed_channel_cache,
+            header_state=header_state,
+        )
+
+
+async def handle_message_edit(
+    client: discord.Client,
+    _before: discord.Message,
+    after: discord.Message,
+    mapping_collection: AsyncIOMotorCollection,
     feed_channel_cache: dict[int, discord.abc.GuildChannel],
 ) -> None:
-    if not is_allowed_guild(getattr(message.guild, "id", None), allowed_guild_ids):
+    guild_id = getattr(after.guild, "id", None)
+    if guild_id is None:
         return
 
-    # Skip the feed bot itself and the feed channel to avoid loops.
-    if (client.user and message.author.id == client.user.id) or message.channel.id == feed_channel_id:
+    if client.user and after.author.id == client.user.id:
         return
 
+    cursor = mapping_collection.find({"source_message_id": after.id})
+    async for mapping in cursor:
+        feed_channel_id = mapping.get("feed_channel_id")
+        feed_message_id = mapping.get("feed_message_id")
+        if feed_channel_id is None or feed_message_id is None:
+            continue
+
+        feed_channel = await get_feed_channel(client, feed_channel_id, feed_channel_cache)
+        if feed_channel is None:
+            continue
+
+        try:
+            feed_message = await feed_channel.fetch_message(feed_message_id)
+        except discord.NotFound:
+            continue
+        except discord.HTTPException as exc:
+            print(f"Failed to fetch mirrored message {feed_message_id} for edit: {exc}")
+            continue
+
+        include_header = feed_message.content.startswith("-# ") if feed_message.content else False
+        try:
+            await feed_message.edit(
+                content=build_content(after, include_header=include_header),
+                allowed_mentions=AllowedMentions,
+            )
+        except discord.HTTPException as exc:
+            print(f"Failed to edit mirrored message {feed_message_id}: {exc}")
+
+
+async def handle_message_delete(
+    client: discord.Client,
+    message: discord.Message,
+    mapping_collection: AsyncIOMotorCollection,
+    feed_channel_cache: dict[int, discord.abc.GuildChannel],
+) -> None:
+    guild_id = getattr(message.guild, "id", None)
+    if guild_id is None:
+        return
+
+    if client.user and message.author and message.author.id == client.user.id:
+        return
+
+    await _delete_mirrored_messages(
+        client=client,
+        source_message_id=message.id,
+        mapping_collection=mapping_collection,
+        feed_channel_cache=feed_channel_cache,
+    )
+
+
+async def handle_raw_message_delete(
+    client: discord.Client,
+    payload: discord.RawMessageDeleteEvent,
+    mapping_collection: AsyncIOMotorCollection,
+    feed_channel_cache: dict[int, discord.abc.GuildChannel],
+) -> None:
+    if payload.guild_id is None:
+        return
+
+    await _delete_mirrored_messages(
+        client=client,
+        source_message_id=payload.message_id,
+        mapping_collection=mapping_collection,
+        feed_channel_cache=feed_channel_cache,
+    )
+
+
+async def mirror_message_to_feed_channel(
+    client: discord.Client,
+    message: discord.Message,
+    feed_channel_id: int,
+    mapping_collection: AsyncIOMotorCollection,
+    feed_channel_cache: dict[int, discord.abc.GuildChannel],
+    header_state: FeedHeaderState,
+) -> None:
     feed_channel = await get_feed_channel(client, feed_channel_id, feed_channel_cache)
-    if feed_channel is None:
+    if feed_channel is None or not hasattr(feed_channel, "send"):
         return
+
+    # Prevent duplicates across restarts and ensure idempotent sends.
+    mapping_id = f"{message.id}:{feed_channel_id}"
+    existing_mapping = await mapping_collection.find_one({"_id": mapping_id})
+    if existing_mapping:
+        return
+
+    # Permission check: only mirror when the bot can send to the feed channel.
+    if getattr(feed_channel, "guild", None) and getattr(feed_channel.guild, "me", None):
+        perms = feed_channel.permissions_for(feed_channel.guild.me)  # type: ignore[arg-type]
+        can_send = perms.send_messages or getattr(perms, "send_messages_in_threads", False)
+        if not (perms.view_channel and can_send):
+            return
 
     files: list[discord.File] = []
     fallback_sticker_files: list[discord.File] = []
@@ -125,12 +334,14 @@ async def handle_message(
     try:
         files = await build_attachment_files(message)
 
-        include_header = _should_include_header(message.channel.id, message.author.id, is_reply=is_reply)
+        include_header = header_state.should_include_header(
+            feed_channel_id, message.channel.id, message.author.id, is_reply=is_reply
+        )
 
         parent_reference = None
         if is_reply:
             parent_source_id = message.reference.message_id
-            parent_mapping = await mapping_collection.find_one({"_id": str(parent_source_id)})
+            parent_mapping = await mapping_collection.find_one({"_id": f"{parent_source_id}:{feed_channel_id}"})
             if parent_mapping:
                 try:
                     parent_reference = await feed_channel.fetch_message(parent_mapping["feed_message_id"])
@@ -142,10 +353,6 @@ async def handle_message(
                         f"(reply target {parent_mapping['feed_message_id']}): {exc}"
                     )
                     parent_reference = None
-
-        existing_mapping = await mapping_collection.find_one({"_id": str(message.id)})
-        if existing_mapping:
-            return
 
         content = build_content(message, include_header=include_header)
         send_kwargs = {
@@ -169,13 +376,15 @@ async def handle_message(
                 except discord.HTTPException as retry_exc:
                     exc = retry_exc
                 else:
-                    _update_last_feed_state(source_channel_id=message.channel.id, author_id=message.author.id)
-                    await mapping_collection.insert_one(
-                        {
-                            "_id": str(message.id),
-                            "source_message_id": message.id,
-                            "feed_message_id": feed_message.id,
-                        }
+                    header_state.update(
+                        feed_channel_id=feed_channel_id, source_channel_id=message.channel.id, author_id=message.author.id
+                    )
+                    await _store_mapping(
+                        mapping_collection=mapping_collection,
+                        mapping_id=mapping_id,
+                        message=message,
+                        feed_message_id=feed_message.id,
+                        feed_channel_id=feed_channel_id,
                     )
                     return
 
@@ -194,13 +403,15 @@ async def handle_message(
             send_kwargs["files"] = [*files, *fallback_sticker_files]
             feed_message = await feed_channel.send(**send_kwargs)
 
-        _update_last_feed_state(source_channel_id=message.channel.id, author_id=message.author.id)
-        await mapping_collection.insert_one(
-            {
-                "_id": str(message.id),
-                "source_message_id": message.id,
-                "feed_message_id": feed_message.id,
-            }
+        header_state.update(
+            feed_channel_id=feed_channel_id, source_channel_id=message.channel.id, author_id=message.author.id
+        )
+        await _store_mapping(
+            mapping_collection=mapping_collection,
+            mapping_id=mapping_id,
+            message=message,
+            feed_message_id=feed_message.id,
+            feed_channel_id=feed_channel_id,
         )
     finally:
         for f in [*files, *fallback_sticker_files]:
@@ -210,107 +421,49 @@ async def handle_message(
                 pass
 
 
-async def handle_message_edit(
-    client: discord.Client,
-    _before: discord.Message,
-    after: discord.Message,
-    feed_channel_id: int,
+async def _store_mapping(
     mapping_collection: AsyncIOMotorCollection,
-    allowed_guild_ids: set[int],
-    feed_channel_cache: dict[int, discord.abc.GuildChannel],
+    mapping_id: str,
+    message: discord.Message,
+    feed_message_id: int,
+    feed_channel_id: int,
 ) -> None:
-    if not is_allowed_guild(getattr(after.guild, "id", None), allowed_guild_ids):
-        return
-
-    if (client.user and after.author.id == client.user.id) or after.channel.id == feed_channel_id:
-        return
-
-    mapping = await mapping_collection.find_one({"_id": str(after.id)})
-    if not mapping:
-        return
-
-    feed_channel = await get_feed_channel(client, feed_channel_id, feed_channel_cache)
-    if feed_channel is None:
-        return
-
-    try:
-        feed_message = await feed_channel.fetch_message(mapping["feed_message_id"])
-    except discord.NotFound:
-        return
-
-    include_header = feed_message.content.startswith("-# ") if feed_message.content else False
-    await feed_message.edit(
-        content=build_content(after, include_header=include_header),
-        allowed_mentions=AllowedMentions,
+    await mapping_collection.insert_one(
+        {
+            "_id": mapping_id,
+            "source_message_id": message.id,
+            "feed_message_id": feed_message_id,
+            "feed_channel_id": feed_channel_id,
+            "source_guild_id": getattr(message.guild, "id", None),
+        }
     )
 
 
-async def handle_message_delete(
+async def _delete_mirrored_messages(
     client: discord.Client,
-    message: discord.Message,
-    feed_channel_id: int,
+    source_message_id: int,
     mapping_collection: AsyncIOMotorCollection,
-    allowed_guild_ids: set[int],
     feed_channel_cache: dict[int, discord.abc.GuildChannel],
 ) -> None:
-    if not is_allowed_guild(getattr(message.guild, "id", None), allowed_guild_ids):
-        return
+    cursor = mapping_collection.find({"source_message_id": source_message_id})
+    async for mapping in cursor:
+        feed_channel_id = mapping.get("feed_channel_id")
+        feed_message_id = mapping.get("feed_message_id")
+        if feed_channel_id is None or feed_message_id is None:
+            continue
 
-    if message.channel.id == feed_channel_id or (client.user and message.author and message.author.id == client.user.id):
-        return
+        feed_channel = await get_feed_channel(client, feed_channel_id, feed_channel_cache)
+        if feed_channel is None:
+            await mapping_collection.delete_one({"_id": mapping["_id"]})
+            continue
 
-    mapping = await mapping_collection.find_one({"_id": str(message.id)})
-    if not mapping:
-        return
-
-    feed_channel = await get_feed_channel(client, feed_channel_id, feed_channel_cache)
-    if feed_channel is None:
-        return
-
-    feed_message_id = mapping["feed_message_id"]
-    try:
-        await client.http.delete_message(feed_channel.id, feed_message_id, reason="Source deleted")
-    except discord.NotFound:
-        pass
-    except discord.Forbidden as exc:
-        print(f"Failed to delete mirrored message (forbidden): {exc}")
-    except Exception as exc:
-        print(f"Failed to delete mirrored message: {exc}")
-    finally:
-        await mapping_collection.delete_one({"_id": str(message.id)})
-
-
-async def handle_raw_message_delete(
-    client: discord.Client,
-    payload: discord.RawMessageDeleteEvent,
-    feed_channel_id: int,
-    mapping_collection: AsyncIOMotorCollection,
-    allowed_guild_ids: set[int],
-    feed_channel_cache: dict[int, discord.abc.GuildChannel],
-) -> None:
-    if not is_allowed_guild(payload.guild_id, allowed_guild_ids):
-        return
-
-    # Skip deletions that happen inside the feed channel.
-    if payload.channel_id == feed_channel_id:
-        return
-
-    mapping = await mapping_collection.find_one({"_id": str(payload.message_id)})
-    if not mapping:
-        return
-
-    feed_channel = await get_feed_channel(client, feed_channel_id, feed_channel_cache)
-    if feed_channel is None:
-        return
-
-    feed_message_id = mapping["feed_message_id"]
-    try:
-        await client.http.delete_message(feed_channel.id, feed_message_id, reason="Source deleted")
-    except discord.NotFound:
-        pass
-    except discord.Forbidden as exc:
-        print(f"Failed to delete mirrored message (forbidden): {exc}")
-    except Exception as exc:
-        print(f"Failed to delete mirrored message: {exc}")
-    finally:
-        await mapping_collection.delete_one({"_id": str(payload.message_id)})
+        try:
+            await client.http.delete_message(feed_channel.id, feed_message_id, reason="Source deleted")
+        except discord.NotFound:
+            pass
+        except discord.Forbidden as exc:
+            print(f"Failed to delete mirrored message (forbidden): {exc}")
+        except Exception as exc:
+            print(f"Failed to delete mirrored message: {exc}")
+        finally:
+            await mapping_collection.delete_one({"_id": mapping["_id"]})
