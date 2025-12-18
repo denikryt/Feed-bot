@@ -201,7 +201,7 @@ async def give_permissions(
     await permissions_collection.update_one(
         {"_id": str(guild.id)},
         {
-            "$setOnInsert": {"guild_id": guild.id, "created_at": now},
+            "$setOnInsert": {"created_at": now},
             "$addToSet": {"authorized_users": user.id},
             "$set": {"updated_at": now, "guild_id": guild.id},
         },
