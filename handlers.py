@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from datetime import datetime, timedelta, timezone
 
 import discord
 import emoji
@@ -67,9 +68,16 @@ class FeedHeaderState:
     """In-memory header grouping state per feed channel."""
 
     def __init__(self) -> None:
-        self._state: dict[int, dict[str, int]] = {}
+        self._state: dict[int, dict[str, int | datetime]] = {}
 
-    def should_include_header(self, feed_channel_id: int, source_channel_id: int, author_id: int, is_reply: bool) -> bool:
+    def should_include_header(
+        self,
+        feed_channel_id: int,
+        source_channel_id: int,
+        author_id: int,
+        is_reply: bool,
+        now: datetime,
+    ) -> bool:
         if is_reply:
             return True
 
@@ -77,10 +85,22 @@ class FeedHeaderState:
         if last is None:
             return True
 
-        return last.get("source_channel_id") != source_channel_id or last.get("author_id") != author_id
+        if last.get("source_channel_id") != source_channel_id or last.get("author_id") != author_id:
+            return True
 
-    def update(self, feed_channel_id: int, source_channel_id: int, author_id: int) -> None:
-        self._state[feed_channel_id] = {"author_id": author_id, "source_channel_id": source_channel_id}
+        last_timestamp = last.get("timestamp")
+        if last_timestamp is None:
+            return True
+
+        return now - last_timestamp >= timedelta(minutes=5)
+
+    def update(self, feed_channel_id: int, source_channel_id: int, author_id: int, timestamp: datetime | None = None) -> None:
+        recorded_at = timestamp or datetime.now(timezone.utc)
+        self._state[feed_channel_id] = {
+            "author_id": author_id,
+            "source_channel_id": source_channel_id,
+            "timestamp": recorded_at,
+        }
 
 
 def build_content(message: discord.Message, include_header: bool) -> str | None:
@@ -334,8 +354,13 @@ async def mirror_message_to_feed_channel(
     try:
         files = await build_attachment_files(message)
 
+        current_time = datetime.now(timezone.utc)
         include_header = header_state.should_include_header(
-            feed_channel_id, message.channel.id, message.author.id, is_reply=is_reply
+            feed_channel_id=feed_channel_id,
+            source_channel_id=message.channel.id,
+            author_id=message.author.id,
+            is_reply=is_reply,
+            now=current_time,
         )
 
         parent_reference = None
@@ -377,7 +402,10 @@ async def mirror_message_to_feed_channel(
                     exc = retry_exc
                 else:
                     header_state.update(
-                        feed_channel_id=feed_channel_id, source_channel_id=message.channel.id, author_id=message.author.id
+                        feed_channel_id=feed_channel_id,
+                        source_channel_id=message.channel.id,
+                        author_id=message.author.id,
+                        timestamp=current_time,
                     )
                     await _store_mapping(
                         mapping_collection=mapping_collection,
@@ -404,7 +432,10 @@ async def mirror_message_to_feed_channel(
             feed_message = await feed_channel.send(**send_kwargs)
 
         header_state.update(
-            feed_channel_id=feed_channel_id, source_channel_id=message.channel.id, author_id=message.author.id
+            feed_channel_id=feed_channel_id,
+            source_channel_id=message.channel.id,
+            author_id=message.author.id,
+            timestamp=current_time,
         )
         await _store_mapping(
             mapping_collection=mapping_collection,
