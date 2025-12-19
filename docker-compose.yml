@@ -3,13 +3,25 @@ services:
     container_name: mongo-main
     image: mongo:7
     command: ["mongod", "--auth"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-change_me}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-database}
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME:-app}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:-app_password}
+      MONGO_APP_DB: ${MONGO_APP_DB:-app_database}
     ports:
       - "127.0.0.1:27017:27017"
     volumes:
       - mongo_main_data:/data/db
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"]
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet -u \"$${MONGO_ROOT_USERNAME}\" -p \"$${MONGO_ROOT_PASSWORD}\" --authenticationDatabase admin --eval 'db.runCommand({ ping: 1 })'",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3

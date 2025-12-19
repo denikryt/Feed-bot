@@ -1,0 +1,5 @@
+2025-12-19 22:38:45+0200 INFO [feed_bot.bot] Initializing bot
+2025-12-19 22:38:45+0200 INFO [feed_bot.db] Connected to MongoDB database feed_database
+2025-12-19 22:38:45+0200 INFO [feed_bot.db] Ensured MongoDB indexes are created
+2025-12-19 22:38:49+0200 INFO [feed_bot.bot] Feed bot connected as tester-bot#2972
+2025-12-19 22:38:49+0200 INFO [feed_bot.bot] Application commands synced
