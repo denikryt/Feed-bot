@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 
 from config import Settings
+
+logger = logging.getLogger("feed_bot.db")
 
 mongo_client: Optional[AsyncIOMotorClient] = None
 mapping_collection: Optional[AsyncIOMotorCollection] = None
@@ -17,6 +20,7 @@ async def init_db(settings: Settings) -> None:
     global mongo_client, mapping_collection, guild_routes_collection, guild_permissions_collection
 
     if mongo_client is not None:
+        logger.debug("Mongo client already initialized; skipping")
         return
 
     client = AsyncIOMotorClient(
@@ -31,7 +35,8 @@ async def init_db(settings: Settings) -> None:
 
     try:
         await client.admin.command("ping")
-    except Exception:
+    except Exception as exc:
+        logger.error("MongoDB ping failed: %s", exc)
         client.close()
         raise
 
@@ -39,6 +44,7 @@ async def init_db(settings: Settings) -> None:
     mapping_collection = mapping
     guild_routes_collection = routes
     guild_permissions_collection = permissions
+    logger.info("Connected to MongoDB database %s", settings.mongo_db_name)
 
     # Helpful indexes for common lookups.
     await mapping_collection.create_index(
@@ -48,6 +54,7 @@ async def init_db(settings: Settings) -> None:
     )
     await guild_routes_collection.create_index("source_guild_id", unique=True)
     await guild_permissions_collection.create_index("guild_id", unique=True)
+    logger.info("Ensured MongoDB indexes are created")
 
 
 def get_mapping_collection() -> AsyncIOMotorCollection:
@@ -72,8 +79,11 @@ async def close_db() -> None:
     global mongo_client, mapping_collection, guild_routes_collection, guild_permissions_collection
 
     if mongo_client is not None:
+        logger.info("Closing MongoDB client")
         mongo_client.close()
         mongo_client = None
+    else:
+        logger.debug("Mongo client already closed")
 
     mapping_collection = None
     guild_routes_collection = None

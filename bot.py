@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import sys
 from datetime import datetime, timezone
 
@@ -14,6 +15,7 @@ from db import (
     get_mapping_collection,
     init_db,
 )
+from logging_config import configure_logging, get_logger
 from handlers import (
     FeedHeaderState,
     handle_message,
@@ -23,6 +25,8 @@ from handlers import (
 )
 
 settings = load_settings()
+configure_logging(settings.log_file_path)
+logger = get_logger("bot")
 
 intents = discord.Intents.default()
 intents.members = True
@@ -110,8 +114,9 @@ async def _sync_commands_once() -> None:
     try:
         await tree.sync()
         _commands_synced = True
+        logger.info("Application commands synced")
     except Exception as exc:  # noqa: BLE001
-        print(f"Failed to sync application commands: {exc}")
+        logger.exception("Failed to sync application commands: %s", exc)
 
 
 async def _resolve_user_display(client: discord.Client, user_id: int) -> str:
@@ -136,7 +141,7 @@ async def _resolve_channel(client: discord.Client, channel_id: int) -> discord.a
 
 @client.event
 async def on_ready() -> None:
-    print(f"Feed bot connected as {client.user}")
+    logger.info("Feed bot connected as %s", client.user)
     await _sync_commands_once()
 
 
@@ -191,6 +196,7 @@ async def give_permissions(
 ) -> None:
     guild = _require_guild(interaction)
     permissions_collection = get_guild_permissions_collection()
+    logger.info("Granting permissions in guild %s to user %s by %s", guild.id, user.id, interaction.user.id)
 
     await interaction.response.defer(ephemeral=True)
 
@@ -252,6 +258,7 @@ async def revoke_permissions(
 ) -> None:
     guild = _require_guild(interaction)
     permissions_collection = get_guild_permissions_collection()
+    logger.info("Revoking permissions in guild %s from user %s by %s", guild.id, user.id, interaction.user.id)
 
     await interaction.response.defer(ephemeral=True)
 
@@ -411,6 +418,9 @@ async def add_feed_channel(interaction: discord.Interaction, channel_id: str, gu
     if existing_route:
         await interaction.followup.send("That feed channel is already configured for this guild.", ephemeral=True)
     else:
+        logger.info(
+            "Added feed channel %s for guild %s by user %s", parsed_channel_id, guild.id, interaction.user.id
+        )
         await interaction.followup.send(
             f"Added <#{parsed_channel_id}> as a feed channel for this guild.", ephemeral=True
         )
@@ -422,6 +432,7 @@ async def add_feed_channel(interaction: discord.Interaction, channel_id: str, gu
 async def remove_feed_channel(interaction: discord.Interaction, channel: str) -> None:
     guild = _require_guild(interaction)
     routes_collection = get_guild_routes_collection()
+    logger.info("Removing feed channel %s for guild %s by user %s", channel, guild.id, interaction.user.id)
 
     await interaction.response.defer(ephemeral=True)
 
@@ -504,6 +515,7 @@ async def list_authorized_users(interaction: discord.Interaction) -> None:
     permissions_collection = get_guild_permissions_collection()
 
     await interaction.response.defer(ephemeral=True)
+    logger.info("Listing authorized users for guild %s by %s", guild.id, interaction.user.id)
 
     doc = await permissions_collection.find_one({"_id": str(guild.id)})
     user_ids = doc.get("authorized_users", []) if doc else []
@@ -526,6 +538,7 @@ async def list_feed_channels(interaction: discord.Interaction) -> None:
     routes_collection = get_guild_routes_collection()
 
     await interaction.response.defer(ephemeral=True)
+    logger.info("Listing feed channels for guild %s by %s", guild.id, interaction.user.id)
 
     route = await routes_collection.find_one({"_id": str(guild.id)})
     feed_channels = route.get("feed_channels", []) if route else []
@@ -558,7 +571,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     if isinstance(error, app_commands.CheckFailure):
         message = str(error)
     else:
-        print(f"Unhandled command error: {error}")
+        logger.exception("Unhandled command error: %s", error)
 
     if interaction.response.is_done():
         await interaction.followup.send(message, ephemeral=True)
@@ -567,6 +580,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 
 async def main() -> None:
+    logger.info("Initializing bot")
     await init_db(settings)
     try:
         await client.start(settings.token)
@@ -578,4 +592,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as exc:  # noqa: BLE001
+        logger.exception("Bot failed to start: %s", exc)
         sys.exit(f"Bot failed: {exc}")

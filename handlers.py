@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 from datetime import datetime, timedelta, timezone
 
 import discord
@@ -8,6 +9,7 @@ import emoji
 from motor.motor_asyncio import AsyncIOMotorCollection
 
 AllowedMentions = discord.AllowedMentions(users=False, roles=False, everyone=False, replied_user=False)
+logger = logging.getLogger("feed_bot.handlers")
 
 
 def split_leading_emoji(name: str) -> tuple[str | None, str]:
@@ -163,10 +165,10 @@ async def _sticker_to_file(sticker: discord.StickerItem) -> discord.File | None:
         content = await sticker.read()
     except TypeError:
         # Lottie stickers cannot be rendered as files; skip them.
-        print(f"Skipping unsupported lottie sticker: {sticker.name} ({sticker.id})")
+        logger.info("Skipping unsupported lottie sticker %s (%s)", sticker.name, sticker.id)
         return None
     except Exception as exc:  # noqa: BLE001
-        print(f"Failed to download sticker {sticker.id}: {exc}")
+        logger.warning("Failed to download sticker %s: %s", sticker.id, exc)
         return None
 
     filename = f"sticker-{sticker.id}.{sticker.format.file_extension}"
@@ -193,7 +195,7 @@ async def get_feed_channel(
         try:
             channel = await client.fetch_channel(feed_channel_id)
         except Exception as exc:
-            print(f"Failed to fetch feed channel: {exc}")
+            logger.warning("Failed to fetch feed channel %s: %s", feed_channel_id, exc)
             return None
 
     feed_channel_cache[feed_channel_id] = channel
@@ -214,6 +216,7 @@ async def handle_message(
 
     # Skip the feed bot itself.
     if client.user and message.author.id == client.user.id:
+        logger.debug("Skipping bot-authored message %s", message.id)
         return
 
     route = await routes_collection.find_one({"_id": str(guild_id)})
@@ -231,6 +234,13 @@ async def handle_message(
         if feed_channel_id is None:
             continue
 
+        logger.info(
+            "Mirroring message %s from guild %s channel %s to feed channel %s",
+            message.id,
+            guild_id,
+            message.channel.id,
+            feed_channel_id,
+        )
         await mirror_message_to_feed_channel(
             client=client,
             message=message,
@@ -253,6 +263,7 @@ async def handle_message_edit(
         return
 
     if client.user and after.author.id == client.user.id:
+        logger.debug("Skipping bot-authored edited message %s", after.id)
         return
 
     cursor = mapping_collection.find({"source_message_id": after.id})
@@ -271,7 +282,12 @@ async def handle_message_edit(
         except discord.NotFound:
             continue
         except discord.HTTPException as exc:
-            print(f"Failed to fetch mirrored message {feed_message_id} for edit: {exc}")
+            logger.warning(
+                "Failed to fetch mirrored message %s for edit (source %s): %s",
+                feed_message_id,
+                after.id,
+                exc,
+            )
             continue
 
         include_header = feed_message.content.startswith("-# ") if feed_message.content else False
@@ -281,7 +297,19 @@ async def handle_message_edit(
                 allowed_mentions=AllowedMentions,
             )
         except discord.HTTPException as exc:
-            print(f"Failed to edit mirrored message {feed_message_id}: {exc}")
+            logger.warning(
+                "Failed to edit mirrored message %s for source %s: %s",
+                feed_message_id,
+                after.id,
+                exc,
+            )
+        else:
+            logger.info(
+                "Updated mirrored message %s for source %s in feed channel %s",
+                feed_message_id,
+                after.id,
+                feed_channel_id,
+            )
 
 
 async def handle_message_delete(
@@ -295,6 +323,7 @@ async def handle_message_delete(
         return
 
     if client.user and message.author and message.author.id == client.user.id:
+        logger.debug("Skipping bot-authored delete event for %s", message.id)
         return
 
     await _delete_mirrored_messages(
@@ -314,6 +343,11 @@ async def handle_raw_message_delete(
     if payload.guild_id is None:
         return
 
+    logger.info(
+        "Processing raw delete event for message %s in guild %s",
+        payload.message_id,
+        payload.guild_id,
+    )
     await _delete_mirrored_messages(
         client=client,
         source_message_id=payload.message_id,
@@ -338,6 +372,7 @@ async def mirror_message_to_feed_channel(
     mapping_id = f"{message.id}:{feed_channel_id}"
     existing_mapping = await mapping_collection.find_one({"_id": mapping_id})
     if existing_mapping:
+        logger.debug("Mapping already exists for %s; skipping duplicate send", mapping_id)
         return
 
     # Permission check: only mirror when the bot can send to the feed channel.
@@ -345,6 +380,11 @@ async def mirror_message_to_feed_channel(
         perms = feed_channel.permissions_for(feed_channel.guild.me)  # type: ignore[arg-type]
         can_send = perms.send_messages or getattr(perms, "send_messages_in_threads", False)
         if not (perms.view_channel and can_send):
+            logger.warning(
+                "Insufficient permissions to send to feed channel %s in guild %s",
+                feed_channel.id,
+                getattr(feed_channel.guild, "id", "unknown"),
+            )
             return
 
     files: list[discord.File] = []
@@ -373,9 +413,11 @@ async def mirror_message_to_feed_channel(
                 except discord.NotFound:
                     parent_reference = None
                 except discord.HTTPException as exc:
-                    print(
-                        f"Failed to fetch parent feed message for {message.id} "
-                        f"(reply target {parent_mapping['feed_message_id']}): {exc}"
+                    logger.warning(
+                        "Failed to fetch parent feed message %s for reply %s: %s",
+                        parent_mapping["feed_message_id"],
+                        message.id,
+                        exc,
                     )
                     parent_reference = None
 
@@ -414,6 +456,11 @@ async def mirror_message_to_feed_channel(
                         feed_message_id=feed_message.id,
                         feed_channel_id=feed_channel_id,
                     )
+                    logger.info(
+                        "Mirrored reply %s to feed channel %s after removing invalid reference",
+                        message.id,
+                        feed_channel_id,
+                    )
                     return
 
             # If stickers failed (e.g., missing permissions), fall back to mirroring as files.
@@ -424,7 +471,7 @@ async def mirror_message_to_feed_channel(
                         fallback_sticker_files.append(sticker_file)
 
             if not fallback_sticker_files:
-                print(f"Failed to mirror message {message.id}: {exc}")
+                logger.error("Failed to mirror message %s to channel %s: %s", message.id, feed_channel_id, exc)
                 raise
 
             send_kwargs.pop("stickers", None)
@@ -443,6 +490,12 @@ async def mirror_message_to_feed_channel(
             message=message,
             feed_message_id=feed_message.id,
             feed_channel_id=feed_channel_id,
+        )
+        logger.info(
+            "Mirrored message %s to feed channel %s as message %s",
+            message.id,
+            feed_channel_id,
+            feed_message.id,
         )
     finally:
         for f in [*files, *fallback_sticker_files]:
@@ -493,8 +546,14 @@ async def _delete_mirrored_messages(
         except discord.NotFound:
             pass
         except discord.Forbidden as exc:
-            print(f"Failed to delete mirrored message (forbidden): {exc}")
+            logger.warning("Failed to delete mirrored message %s (forbidden): %s", feed_message_id, exc)
         except Exception as exc:
-            print(f"Failed to delete mirrored message: {exc}")
+            logger.warning("Failed to delete mirrored message %s: %s", feed_message_id, exc)
         finally:
             await mapping_collection.delete_one({"_id": mapping["_id"]})
+            logger.info(
+                "Removed mirrored message %s for source %s in feed channel %s",
+                feed_message_id,
+                source_message_id,
+                feed_channel_id,
+            )
