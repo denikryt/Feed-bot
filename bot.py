@@ -565,6 +565,117 @@ async def list_feed_channels(interaction: discord.Interaction) -> None:
     await interaction.followup.send("\n".join(lines), ephemeral=True)
 
 
+@tree.command(name="remove_feed_channel", description="Remove this feed channel from a configured guild.")
+@app_commands.describe(guild="Guild to remove this feed channel from")
+async def remove_feed_channel_from_feed(interaction: discord.Interaction, guild: str) -> None:
+    channel = interaction.channel
+    if channel is None or not hasattr(channel, "id"):
+        await interaction.response.send_message("This command must be used in a channel.", ephemeral=True)
+        return
+
+    try:
+        target_guild_id = int(guild)
+    except ValueError:
+        await interaction.response.send_message("Invalid guild selected.", ephemeral=True)
+        return
+
+    feed_channel_id = channel.id
+    routes_collection = get_guild_routes_collection()
+
+    await interaction.response.defer(ephemeral=True)
+
+    current_route = await routes_collection.find_one(
+        {"_id": str(target_guild_id), "feed_channels.channel_id": feed_channel_id}
+    )
+    if not current_route:
+        await interaction.followup.send(
+            "This channel is not configured as a feed channel for that guild.", ephemeral=True
+        )
+        return
+
+    if not _is_admin(interaction.user):
+        permissions_doc = await get_guild_permissions_collection().find_one({"_id": str(target_guild_id)})
+        authorized_users = set(permissions_doc.get("authorized_users", [])) if permissions_doc else set()
+        if interaction.user.id not in authorized_users:
+            await interaction.followup.send(
+                "You are not authorized to manage feed routing for that guild.", ephemeral=True
+            )
+            return
+
+    before_count = len(current_route.get("feed_channels", []))
+    now = now_utc()
+    updated_route = await routes_collection.find_one_and_update(
+        {"_id": str(target_guild_id)},
+        [
+            {
+                "$set": {
+                    "feed_channels": {
+                        "$filter": {
+                            "input": {"$ifNull": ["$feed_channels", []]},
+                            "as": "fc",
+                            "cond": {"$ne": ["$$fc.channel_id", feed_channel_id]},
+                        }
+                    },
+                    "updated_at": now,
+                    "created_at": {"$ifNull": ["$created_at", now]},
+                    "source_guild_id": {"$ifNull": ["$source_guild_id", target_guild_id]},
+                }
+            },
+        ],
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+
+    after_count = len(updated_route.get("feed_channels", [])) if updated_route else 0
+    if before_count == after_count:
+        await interaction.followup.send("No changes were made to the feed channel list.", ephemeral=True)
+        return
+
+    guild_obj = client.get_guild(target_guild_id)
+    guild_label = guild_obj.name if guild_obj else f"Guild {target_guild_id}"
+    logger.info(
+        "Removed feed channel %s for guild %s by user %s", feed_channel_id, target_guild_id, interaction.user.id
+    )
+    await interaction.followup.send(
+        f"Removed this feed channel from {guild_label}.", ephemeral=True
+    )
+
+
+@remove_feed_channel_from_feed.autocomplete("guild")
+async def remove_feed_channel_from_feed_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    channel = interaction.channel
+    if channel is None or not hasattr(channel, "id"):
+        return []
+
+    feed_channel_id = channel.id
+    routes = await get_guild_routes_collection().find({"feed_channels.channel_id": feed_channel_id}).to_list(length=25)
+
+    current_lower = current.lower()
+    choices: list[app_commands.Choice[str]] = []
+    for route in routes:
+        guild_id = route.get("_id") or route.get("source_guild_id")
+        if guild_id is None:
+            continue
+
+        try:
+            guild_id_int = int(guild_id)
+        except (TypeError, ValueError):
+            continue
+
+        guild_obj = client.get_guild(guild_id_int)
+        guild_name = guild_obj.name if guild_obj else f"Guild {guild_id_int}"
+        label = f"{guild_name} ({guild_id_int})"
+
+        if current_lower in label.lower():
+            choices.append(app_commands.Choice(name=label[:100], value=str(guild_id_int)))
+        if len(choices) >= 25:
+            break
+
+    return choices
+
+
 @tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
     message = "Something went wrong while running this command."

@@ -3,3 +3,65 @@
 2025-12-19 22:38:45+0200 INFO [feed_bot.db] Ensured MongoDB indexes are created
 2025-12-19 22:38:49+0200 INFO [feed_bot.bot] Feed bot connected as tester-bot#2972
 2025-12-19 22:38:49+0200 INFO [feed_bot.bot] Application commands synced
+2025-12-20 11:14:02+0200 INFO [feed_bot.bot] Feed bot connected as tester-bot#2972
+2025-12-20 14:34:34+0200 INFO [feed_bot.bot] Feed bot connected as tester-bot#2972
+2025-12-29 23:57:26+0200 INFO [feed_bot.bot] Initializing bot
+2025-12-29 23:57:26+0200 INFO [feed_bot.db] Connected to MongoDB database feed_database
+2025-12-29 23:57:26+0200 INFO [feed_bot.db] Ensured MongoDB indexes are created
+2025-12-29 23:57:30+0200 INFO [feed_bot.bot] Feed bot connected as tester-bot#2972
+2025-12-29 23:57:31+0200 INFO [feed_bot.bot] Application commands synced
+2025-12-29 23:58:45+0200 INFO [feed_bot.bot] Added feed channel 1455318996546228367 for guild 1279822661194879098 by user 231855055601532938
+2025-12-29 23:58:52+0200 INFO [feed_bot.handlers] Mirroring message 1455319184748712029 from guild 1279822661194879098 channel 1279822661194879101 to feed channel 1455318996546228367
+2025-12-29 23:58:52+0200 INFO [feed_bot.handlers] Mirroring message 1455319186183028807 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:58:52+0200 INFO [feed_bot.handlers] Mirrored message 1455319184748712029 to feed channel 1455318996546228367 as message 1455319186090885313
+2025-12-29 23:58:52+0200 INFO [feed_bot.handlers] Mirrored message 1455319186183028807 to feed channel 1455318996546228367 as message 1455319187869143144
+2025-12-29 23:58:52+0200 INFO [feed_bot.handlers] Mirroring message 1455319187189661919 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:58:53+0200 INFO [feed_bot.handlers] Mirroring message 1455319188595015731 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:58:53+0200 INFO [feed_bot.handlers] Mirrored message 1455319187189661919 to feed channel 1455318996546228367 as message 1455319189664432312
+2025-12-29 23:58:53+0200 INFO [feed_bot.handlers] Mirroring message 1455319190494904320 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:58:53+0200 INFO [feed_bot.handlers] Mirrored message 1455319188595015731 to feed channel 1455318996546228367 as message 1455319190855618831
+2025-12-29 23:58:53+0200 INFO [feed_bot.handlers] Mirroring message 1455319191652401268 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:58:54+0200 INFO [feed_bot.handlers] Mirrored message 1455319191652401268 to feed channel 1455318996546228367 as message 1455319192449319139
+2025-12-29 23:58:54+0200 INFO [feed_bot.handlers] Mirroring message 1455319193498030092 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:58:57+0200 INFO [feed_bot.handlers] Mirrored message 1455319190494904320 to feed channel 1455318996546228367 as message 1455319191908389098
+2025-12-29 23:58:58+0200 INFO [feed_bot.handlers] Mirrored message 1455319193498030092 to feed channel 1455318996546228367 as message 1455319208920350772
+2025-12-29 23:58:58+0200 INFO [feed_bot.handlers] Mirroring message 1455319212426924226 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:58:59+0200 INFO [feed_bot.handlers] Mirroring message 1455319213190283379 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:58:59+0200 INFO [feed_bot.handlers] Mirrored message 1455319212426924226 to feed channel 1455318996546228367 as message 1455319213614043218
+2025-12-29 23:58:59+0200 INFO [feed_bot.handlers] Mirroring message 1455319213978685535 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:58:59+0200 INFO [feed_bot.handlers] Mirrored message 1455319213978685535 to feed channel 1455318996546228367 as message 1455319215639625751
+2025-12-29 23:58:59+0200 INFO [feed_bot.handlers] Mirrored message 1455319213190283379 to feed channel 1455318996546228367 as message 1455319215341830380
+2025-12-29 23:58:59+0200 INFO [feed_bot.handlers] Mirroring message 1455319216432349224 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:58:59+0200 INFO [feed_bot.handlers] Mirroring message 1455319216642330830 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:59:00+0200 INFO [feed_bot.handlers] Mirrored message 1455319216642330830 to feed channel 1455318996546228367 as message 1455319217946493021
+2025-12-29 23:59:03+0200 INFO [feed_bot.handlers] Mirroring message 1455319230755897426 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:59:03+0200 INFO [feed_bot.handlers] Mirroring message 1455319230475141340 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:59:03+0200 INFO [feed_bot.handlers] Mirrored message 1455319216432349224 to feed channel 1455318996546228367 as message 1455319217787109438
+2025-12-29 23:59:03+0200 INFO [feed_bot.handlers] Mirrored message 1455319230755897426 to feed channel 1455318996546228367 as message 1455319233608159253
+2025-12-29 23:59:03+0200 INFO [feed_bot.handlers] Mirrored message 1455319230475141340 to feed channel 1455318996546228367 as message 1455319233222152405
+2025-12-29 23:59:04+0200 INFO [feed_bot.handlers] Mirroring message 1455319234245820446 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:59:04+0200 INFO [feed_bot.handlers] Mirroring message 1455319234912456977 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-29 23:59:04+0200 INFO [feed_bot.db] Closing MongoDB client
+2025-12-29 23:59:54+0200 INFO [feed_bot.bot] Initializing bot
+2025-12-29 23:59:54+0200 INFO [feed_bot.db] Connected to MongoDB database feed_database
+2025-12-29 23:59:54+0200 INFO [feed_bot.db] Ensured MongoDB indexes are created
+2025-12-29 23:59:57+0200 INFO [feed_bot.bot] Feed bot connected as tester-bot#2972
+2025-12-29 23:59:57+0200 INFO [feed_bot.bot] Application commands synced
+2025-12-30 00:00:19+0200 INFO [feed_bot.handlers] Mirroring message 1455319551246991512 from guild 1279822661194879098 channel 1450618512015097866 to feed channel 1455318996546228367
+2025-12-30 00:00:20+0200 INFO [feed_bot.handlers] Mirrored message 1455319551246991512 to feed channel 1455318996546228367 as message 1455319553730023588
+2025-12-30 00:00:20+0200 INFO [feed_bot.handlers] Mirroring message 1455319553490948188 from guild 1279822661194879098 channel 1451541175931633714 to feed channel 1455318996546228367
+2025-12-30 00:00:20+0200 INFO [feed_bot.handlers] Mirrored message 1455319553490948188 to feed channel 1455318996546228367 as message 1455319556049338603
+2025-12-30 00:00:46+0200 INFO [feed_bot.handlers] Mirroring message 1455319664187019355 from guild 1279822661194879098 channel 1451541132139040860 to feed channel 1455318996546228367
+2025-12-30 00:00:47+0200 INFO [feed_bot.handlers] Mirrored message 1455319664187019355 to feed channel 1455318996546228367 as message 1455319666325983477
+2025-12-30 00:01:09+0200 INFO [feed_bot.handlers] Mirroring message 1455319759867351162 from guild 1279822661194879098 channel 1451541132139040860 to feed channel 1455318996546228367
+2025-12-30 00:01:10+0200 INFO [feed_bot.handlers] Mirrored message 1455319759867351162 to feed channel 1455318996546228367 as message 1455319762321018920
+2025-12-30 00:01:16+0200 INFO [feed_bot.handlers] Mirroring message 1455319791203254272 from guild 1279822661194879098 channel 1450618512015097866 to feed channel 1455318996546228367
+2025-12-30 00:03:56+0200 INFO [feed_bot.db] Closing MongoDB client
+2025-12-30 00:04:11+0200 INFO [feed_bot.bot] Initializing bot
+2025-12-30 00:04:11+0200 INFO [feed_bot.db] Connected to MongoDB database feed_database
+2025-12-30 00:04:11+0200 INFO [feed_bot.db] Ensured MongoDB indexes are created
+2025-12-30 00:04:14+0200 INFO [feed_bot.bot] Feed bot connected as tester-bot#2972
+2025-12-30 00:04:16+0200 INFO [feed_bot.bot] Application commands synced
+2025-12-30 00:04:52+0200 INFO [feed_bot.handlers] Mirroring message 1455320694412808418 from guild 1279822661194879098 channel 1451541132139040860 to feed channel 1455318996546228367
+2025-12-30 00:05:25+0200 INFO [feed_bot.handlers] Mirroring message 1455320831621333155 from guild 1279822661194879098 channel 1450618512015097866 to feed channel 1455318996546228367
+2025-12-30 00:05:32+0200 INFO [feed_bot.db] Closing MongoDB client

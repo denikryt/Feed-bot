@@ -160,6 +160,39 @@ def build_content(message: discord.Message, include_header: bool) -> str | None:
     return "\n".join(parts)
 
 
+def _split_content_with_header(content: str, max_length: int = 2000) -> list[str]:
+    """Split long content with a header into at most two messages."""
+    if len(content) <= max_length:
+        return [content]
+
+    header_line, sep, body = content.partition("\n")
+    if not sep:
+        return [content]
+
+    available = max_length - len(header_line) - len(sep)
+    if available <= 0:
+        return [content]
+
+    split_at_period = body.rfind(".", 0, available + 1)
+    split_at_space = body.rfind(" ", 0, available + 1)
+
+    if split_at_period != -1:
+        split_index = split_at_period + 1
+    elif split_at_space != -1:
+        split_index = split_at_space + 1
+    else:
+        split_index = min(available, 1999)
+
+    first_body = body[:split_index].rstrip()
+    first_message = header_line if not first_body else f"{header_line}\n{first_body}"
+    second_body = body[split_index:].lstrip()
+
+    if not second_body:
+        return [first_message]
+
+    return [first_message, second_body]
+
+
 async def _sticker_to_file(sticker: discord.StickerItem) -> discord.File | None:
     try:
         content = await sticker.read()
@@ -427,8 +460,12 @@ async def mirror_message_to_feed_channel(
             "allowed_mentions": AllowedMentions,
             "reference": parent_reference,
         }
-        if content is not None:
-            send_kwargs["content"] = content
+        contents_to_send = [content] if content is not None else []
+        if content and include_header and len(content) > 2000:
+            contents_to_send = _split_content_with_header(content)
+
+        if contents_to_send:
+            send_kwargs["content"] = contents_to_send[0]
         if stickers:
             send_kwargs["stickers"] = stickers
 
@@ -491,6 +528,29 @@ async def mirror_message_to_feed_channel(
             feed_message_id=feed_message.id,
             feed_channel_id=feed_channel_id,
         )
+        for idx, extra_content in enumerate(contents_to_send[1:], start=1):
+            try:
+                extra_message = await feed_channel.send(
+                    content=extra_content,
+                    allowed_mentions=AllowedMentions,
+                )
+            except discord.HTTPException as exc:
+                logger.warning(
+                    "Failed to send overflow part %s for source %s to feed channel %s: %s",
+                    idx,
+                    message.id,
+                    feed_channel_id,
+                    exc,
+                )
+                continue
+
+            await _store_mapping(
+                mapping_collection=mapping_collection,
+                mapping_id=f"{mapping_id}:{idx}",
+                message=message,
+                feed_message_id=extra_message.id,
+                feed_channel_id=feed_channel_id,
+            )
         logger.info(
             "Mirrored message %s to feed channel %s as message %s",
             message.id,
