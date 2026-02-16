@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+    app:
+        image: ghcr.io/denikryt/feed-bot:${GIT_COMMIT_HASH:-latest}
+        dns:
+            - 8.8.8.8
+            - 8.8.4.4
+        environment:
+            - MONGO_URI=${MONGO_URI}
+            - MONGO_DB=${MONGO_DB}
+            - DISCORD_TOKEN=${DISCORD_TOKEN}
+            - ALLOWED_GUILD_IDS=${ALLOWED_GUILD_IDS}
+            - MONGO_MESSAGE_MAPPING_COLLECTION=${MONGO_MESSAGE_MAPPING_COLLECTION:-message_mappings}
+            - MONGO_GUILD_ROUTES_COLLECTION=${MONGO_GUILD_ROUTES_COLLECTION:-guild_routes}
+            - MONGO_GUILD_PERMISSIONS_COLLECTION=${MONGO_GUILD_PERMISSIONS_COLLECTION:-guild_permissions}
+            - LOG_FILE=${LOG_FILE:-logs/feed_bot.log}
+        deploy:
+            update_config:
+                order: stop-first
+        networks:
+            - infra_mongo-rs-net
+
+networks:
+    infra_mongo-rs-net:
+        external: true

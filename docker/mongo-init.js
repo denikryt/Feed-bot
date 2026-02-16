@@ -1,6 +1,6 @@
-const appUser = process.env.MONGO_APP_USERNAME || "feed_app";
-const appPassword = process.env.MONGO_APP_PASSWORD || "feed_password";
-const appDbName = process.env.MONGO_APP_DB || "feed";
+const appUser = process.env.MONGO_APP_USERNAME || "feedbot";
+const appPassword = process.env.MONGO_APP_PASSWORD || "password";
+const appDbName = process.env.MONGO_APP_DB || "feed_database";
 
 const appDb = db.getSiblingDB(appDbName);
 
