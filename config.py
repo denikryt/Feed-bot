@@ -13,6 +13,7 @@ class Settings:
     mapping_collection_name: str
     guild_routes_collection_name: str
     guild_permissions_collection_name: str
+    allowed_guild_ids: set[int]
     log_file_path: str
 
 
@@ -26,9 +27,13 @@ def load_settings() -> Settings:
     guild_routes_collection_name = os.getenv("MONGO_GUILD_ROUTES_COLLECTION") or "guild_routes"
     guild_permissions_collection_name = os.getenv("MONGO_GUILD_PERMISSIONS_COLLECTION") or "guild_permissions"
     log_file_path = os.getenv("LOG_FILE") or "logs/feed_bot.log"
+    allowed_raw = os.getenv("ALLOWED_GUILD_IDS", "")
+    allowed_guild_ids = {int(value.strip()) for value in allowed_raw.split(",") if value.strip()}
 
     if not token or not mongo_uri or not mongo_db_name:
         sys.exit("DISCORD_TOKEN, MONGO_URI, and MONGO_DB must be set")
+    if not allowed_guild_ids:
+        sys.exit("ALLOWED_GUILD_IDS must be set to a comma-separated list of guild ids")
 
     return Settings(
         token=token,
@@ -37,5 +42,6 @@ def load_settings() -> Settings:
         mapping_collection_name=mapping_collection_name,
         guild_routes_collection_name=guild_routes_collection_name,
         guild_permissions_collection_name=guild_permissions_collection_name,
+        allowed_guild_ids=allowed_guild_ids,
         log_file_path=log_file_path,
     )

@@ -27,6 +27,7 @@ from handlers import (
 settings = load_settings()
 configure_logging(settings.log_file_path)
 logger = get_logger("bot")
+allowed_guild_ids = settings.allowed_guild_ids
 
 intents = discord.Intents.default()
 intents.members = True
@@ -46,6 +47,8 @@ def now_utc() -> datetime:
 def _require_guild(interaction: discord.Interaction) -> discord.Guild:
     if interaction.guild is None:
         raise app_commands.CheckFailure("This command can only be used inside a server.")
+    if interaction.guild.id not in allowed_guild_ids:
+        raise app_commands.CheckFailure("This command is not allowed in this server.")
     return interaction.guild
 
 
@@ -147,6 +150,8 @@ async def on_ready() -> None:
 
 @client.event
 async def on_message(message: discord.Message) -> None:
+    if message.guild is None or message.guild.id not in allowed_guild_ids:
+        return
     await handle_message(
         client=client,
         message=message,
@@ -159,6 +164,8 @@ async def on_message(message: discord.Message) -> None:
 
 @client.event
 async def on_message_edit(before: discord.Message, after: discord.Message) -> None:
+    if after.guild is None or after.guild.id not in allowed_guild_ids:
+        return
     await handle_message_edit(
         client=client,
         _before=before,
@@ -170,6 +177,8 @@ async def on_message_edit(before: discord.Message, after: discord.Message) -> No
 
 @client.event
 async def on_message_delete(message: discord.Message) -> None:
+    if message.guild is None or message.guild.id not in allowed_guild_ids:
+        return
     await handle_message_delete(
         client=client,
         message=message,
@@ -180,6 +189,8 @@ async def on_message_delete(message: discord.Message) -> None:
 
 @client.event
 async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent) -> None:
+    if payload.guild_id is None or payload.guild_id not in allowed_guild_ids:
+        return
     await handle_raw_message_delete(
         client=client,
         payload=payload,
