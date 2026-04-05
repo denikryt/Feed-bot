@@ -61,12 +61,7 @@ jobs:
             - name: Create env file
               run: |
                   echo "GIT_COMMIT_HASH='${{ github.sha }}'" >> ./envfile
-                  echo "MONGO_ROOT_USERNAME='${{ secrets.MONGO_ROOT_USERNAME }}'" >> ./envfile
-                  echo "MONGO_ROOT_PASSWORD='${{ secrets.MONGO_ROOT_PASSWORD }}'" >> ./envfile
-                  echo "MONGO_INITDB_DATABASE='${{ secrets.MONGO_INITDB_DATABASE }}'" >> ./envfile
-                  echo "MONGO_APP_USERNAME='${{ secrets.MONGO_APP_USERNAME }}'" >> ./envfile
-                  echo "MONGO_APP_PASSWORD='${{ secrets.MONGO_APP_PASSWORD }}'" >> ./envfile
-                  echo "MONGO_APP_DB='${{ secrets.MONGO_APP_DB }}'" >> ./envfile
+                  echo "MONGO_URI='${{ secrets.MONGO_URI }}'" >> ./envfile
                   echo "MONGO_DB='${{ secrets.MONGO_DB }}'" >> ./envfile
                   echo "DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}" >> ./envfile
                   echo "ALLOWED_GUILD_IDS='${{ secrets.ALLOWED_GUILD_IDS }}'" >> ./envfile

@@ -1,48 +1,16 @@
 services:
-  mongo:
-    container_name: mongo-main
-    image: mongo:7
-    command: ["mongod", "--auth"]
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-root}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-change_me}
-      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-feed_database}
-      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME:-feedbot}
-      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:-password}
-      MONGO_APP_DB: ${MONGO_APP_DB:-feed_database}
-    ports:
-      - "127.0.0.1:27017:27017"
-    volumes:
-      - mongo_main_data:/data/db
-      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
-    restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "mongosh --quiet -u \"$${MONGO_ROOT_USERNAME}\" -p \"$${MONGO_ROOT_PASSWORD}\" --authenticationDatabase admin --eval 'db.runCommand({ ping: 1 })'",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
   app:
     build:
       context: .
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       ALLOWED_GUILD_IDS: ${ALLOWED_GUILD_IDS}
-      MONGO_URI: mongodb://${MONGO_APP_USERNAME:-feedbot}:${MONGO_APP_PASSWORD:-password}@mongo:27017/${MONGO_APP_DB:-feed_database}?authSource=${MONGO_APP_DB:-feed_database}
+      MONGO_URI: ${MONGO_URI:-mongodb://feedbot:password@host.docker.internal:27017/feed_database?authSource=feed_database}
       MONGO_DB: ${MONGO_DB:-feed_database}
       MONGO_MESSAGE_MAPPING_COLLECTION: ${MONGO_MESSAGE_MAPPING_COLLECTION:-message_mappings}
       MONGO_GUILD_ROUTES_COLLECTION: ${MONGO_GUILD_ROUTES_COLLECTION:-guild_routes}
       MONGO_GUILD_PERMISSIONS_COLLECTION: ${MONGO_GUILD_PERMISSIONS_COLLECTION:-guild_permissions}
       LOG_FILE: ${LOG_FILE:-logs/feed_bot.log}
-    depends_on:
-      mongo:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
-
-volumes:
-  mongo_main_data:
