@@ -2,6 +2,57 @@
 
 Discord bot with MongoDB-backed routing and message mapping.
 
+## What This Project Does
+
+Feed Bot mirrors messages from regular Discord channels into one or more configured feed channels inside the same guild.
+
+It stores routing and mirrored-message metadata in MongoDB, so the bot can:
+
+- remember which feed channels are configured for each guild
+- avoid duplicate mirrored messages after restarts
+- update mirrored messages when the source message is edited
+- remove mirrored messages when the source message is deleted
+- keep guild permission settings for who can manage feed routing
+
+In practice, the result is a read-only feed channel where messages from selected source channels are reposted with channel context and tracked in MongoDB.
+
+## Minimal Setup
+
+Minimum requirements:
+
+- a Discord bot token
+- at least one allowed guild id
+- a reachable MongoDB instance
+
+Minimum `.env` values:
+
+```env
+DISCORD_TOKEN=...
+ALLOWED_GUILD_IDS=123456789012345678
+MONGO_URI=mongodb://feedbot:password@localhost:27017/feed_database?authSource=feed_database
+MONGO_DB=feed_database
+```
+
+For the Docker mode where the bot runs in a container and MongoDB runs on the host, also set:
+
+```env
+MONGO_URI_DOCKER=mongodb://feedbot:password@host.docker.internal:27017/feed_database?authSource=feed_database
+```
+
+## Expected Result
+
+After startup:
+
+- the bot connects to Discord
+- application commands are synced
+- MongoDB indexes are created automatically
+
+After you configure a feed channel and send a message in a source channel:
+
+- the message appears in the configured feed channel
+- a route record is stored in `guild_routes`
+- a mirrored message record is stored in `message_mappings`
+
 ## Configuration
 
 Create `.env` from `.env.example` and fill in the required values.
