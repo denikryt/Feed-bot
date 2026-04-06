@@ -8,8 +8,8 @@ on:
 env:
     REGISTRY: ghcr.io
     DOCKER_STACKE_NAME: feed-bot
-    DEPLOY_USER: ${{ vars.DEPLOY_USER }}
-    HOST: ${{ vars.DEPLOY_HOST }}
+    DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+    HOST: ${{ secrets.DEPLOY_HOST }}
 
 jobs:
     build-and-push-image:

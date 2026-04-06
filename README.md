@@ -190,12 +190,9 @@ Required GitHub secrets:
 - `MONGO_GUILD_ROUTES_COLLECTION`
 - `MONGO_GUILD_PERMISSIONS_COLLECTION`
 - `LOG_FILE`
-- `DEPLOY_SSH_PRIVATE_KEY`
-
-Required GitHub variables:
-
 - `DEPLOY_USER`
 - `DEPLOY_HOST`
+- `DEPLOY_SSH_PRIVATE_KEY`
 
 ## Which Mode To Use
 
