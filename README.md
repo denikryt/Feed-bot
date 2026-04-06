@@ -192,6 +192,11 @@ Required GitHub secrets:
 - `LOG_FILE`
 - `DEPLOY_SSH_PRIVATE_KEY`
 
+Required GitHub variables:
+
+- `DEPLOY_USER`
+- `DEPLOY_HOST`
+
 ## Which Mode To Use
 
 Use:
