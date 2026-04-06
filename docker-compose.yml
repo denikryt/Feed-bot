@@ -5,7 +5,7 @@ services:
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       ALLOWED_GUILD_IDS: ${ALLOWED_GUILD_IDS}
-      MONGO_URI: ${MONGO_URI:-mongodb://feedbot:password@host.docker.internal:27017/feed_database?authSource=feed_database}
+      MONGO_URI: ${MONGO_URI_DOCKER:-mongodb://feedbot:password@host.docker.internal:27017/feed_database?authSource=feed_database}
       MONGO_DB: ${MONGO_DB:-feed_database}
       MONGO_MESSAGE_MAPPING_COLLECTION: ${MONGO_MESSAGE_MAPPING_COLLECTION:-message_mappings}
       MONGO_GUILD_ROUTES_COLLECTION: ${MONGO_GUILD_ROUTES_COLLECTION:-guild_routes}

@@ -11,6 +11,7 @@ Main variables:
 - `DISCORD_TOKEN`
 - `ALLOWED_GUILD_IDS`
 - `MONGO_URI`
+- `MONGO_URI_DOCKER`
 - `MONGO_DB`
 - `MONGO_MESSAGE_MAPPING_COLLECTION`
 - `MONGO_GUILD_ROUTES_COLLECTION`
@@ -52,26 +53,42 @@ python bot.py
 
 [`docker-compose.yml`](./docker-compose.yml) starts only the bot container.
 
-It expects `MONGO_URI` from `.env`.
+It expects `MONGO_URI_DOCKER` from `.env`.
+
+`MONGO_URI=...localhost:27017...` works for `python bot.py` on the host, but it does not work inside the container because `localhost` there means the container itself.
+
+On Linux, the host MongoDB service must also be reachable from the Docker host gateway address. If MongoDB is bound only to `127.0.0.1`, or if the firewall blocks `27017/tcp`, the container will not be able to reach it through `host.docker.internal`.
 
 Examples:
 
 - host Mongo from inside the container:
 
 ```env
-MONGO_URI=mongodb://feedbot:password@host.docker.internal:27017/feed_database?authSource=feed_database
+MONGO_URI_DOCKER=mongodb://feedbot:password@host.docker.internal:27017/feed_database?authSource=feed_database
 ```
 
 - remote Mongo:
 
 ```env
-MONGO_URI=mongodb://user:password@mongo-host:27017/feed_database?authSource=feed_database
+MONGO_URI_DOCKER=mongodb://user:password@mongo-host:27017/feed_database?authSource=feed_database
 ```
 
 Run:
 
 ```bash
 docker compose up --build
+```
+
+Linux host notes:
+
+- MongoDB must listen on an address reachable from Docker, not only on `127.0.0.1`
+- if `ufw` is enabled, allow `27017/tcp` from your LAN and Docker private subnets
+
+Example `ufw` rules:
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 27017 proto tcp
+sudo ufw allow from 172.16.0.0/12 to any port 27017 proto tcp
 ```
 
 ## Local Docker Run With Bot And Mongo Together
@@ -129,6 +146,6 @@ Required GitHub secrets:
 Use:
 
 - `python bot.py` for normal local development
-- `docker compose up --build` if you want the bot in a container but Mongo outside it
+- `docker compose up --build` if you want the bot in a container but Mongo outside it; set `MONGO_URI_DOCKER` for this mode
 - `docker compose -f docker-compose.yml -f docker-compose.mongo.yml up --build` if you want both bot and Mongo in Docker
 - GitHub Actions on `main` for production deployment
